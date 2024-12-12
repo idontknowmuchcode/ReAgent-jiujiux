@@ -68,15 +68,30 @@ public class EntityInfo
     [Api]
     public string PlayerName => Entity.GetComponent<Player>()?.PlayerName ?? string.Empty;
 
+    [Api]
+    public Vector2 ScreenPos => Controller.IngameState.Camera.WorldToScreen(Entity.Pos);
+
+    [Api]
+    public Vector2 RandomizedScreenPos(int minOffset = -5, int maxOffset = 5)
+    {
+        var random = new Random();
+        return ScreenPos + new Vector2(
+            random.Next(minOffset, maxOffset),
+            random.Next(minOffset, maxOffset)
+        );
+    }
+
 }
 
 [Api]
 public class MonsterInfo : EntityInfo
 {
+    protected readonly GameController Controller;
     private bool? _isInvincible;
 
     public MonsterInfo(GameController controller, Entity entity) : base(controller, entity)
     {
+        Controller = controller;
         Vitals = new VitalsInfo(entity.GetComponent<Life>());
         Actor = new ActorInfo(entity);
         Skills = new SkillDictionary(controller, entity);
@@ -106,6 +121,9 @@ public class MonsterInfo : EntityInfo
 
     [Api]
     public SkillDictionary Skills { get; }
+
+    [Api]
+    public bool IsMoving => Entity.TryGetComponent<Actor>(out var actor) && actor.isMoving;
 }
 
 public class NearbyMonsterInfo
@@ -167,4 +185,14 @@ public class NearbyMonsterInfo
 
     public IEnumerable<MonsterInfo> GetMonsters(int range, MonsterRarity rarity) =>
         _monsters.TakeWhile(x => x.Key <= range).SelectMany(x => x.Value).Where(x => (x.Rarity & rarity) != 0);
+
+    [Api]
+    public double DistanceBetween(MonsterInfo monster1, MonsterInfo monster2)
+    {
+        var dx = monster1.Position.X - monster2.Position.X;
+        var dy = monster1.Position.Y - monster2.Position.Y;
+        var dz = monster1.Position.Z - monster2.Position.Z;
+        return Math.Sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
 }

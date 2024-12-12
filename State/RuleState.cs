@@ -6,6 +6,7 @@ using System.Windows.Forms;
 using ExileCore2;
 using ExileCore2.PoEMemory.Components;
 using ExileCore2.Shared.Enums;
+using System.Numerics;
 
 namespace ReAgent.State;
 
@@ -16,11 +17,12 @@ public class RuleState
     private readonly Lazy<List<EntityInfo>> _miscellaneousObjects;
     private readonly RuleInternalState _internalState;
     private readonly Lazy<List<EntityInfo>> _ingameiconObjects;
-
+    
     private readonly Lazy<List<EntityInfo>> _effects;
     private readonly Lazy<List<MonsterInfo>> _allMonsters;
     private readonly Lazy<List<MonsterInfo>> _allPlayers;
     private readonly Lazy<List<MonsterInfo>> _corpses;
+    private readonly GameController _gameController;
 
     public RuleInternalState InternalState
     {
@@ -38,15 +40,15 @@ public class RuleState
     public RuleState(ReAgent plugin, RuleInternalState internalState)
     {
         _internalState = internalState;
-        var controller = plugin.GameController;
-        if (controller != null)
+        _gameController = plugin.GameController;
+        if (_gameController != null)
         {
             IsInHideout = plugin.GameController.Area.CurrentArea.IsHideout;
             IsInTown = plugin.GameController.Area.CurrentArea.IsTown;
             IsInPeacefulArea = plugin.GameController.Area.CurrentArea.IsPeaceful;
             AreaName = plugin.GameController.Area.CurrentArea.Name;
 
-            var player = controller.Player;
+            var player = _gameController.Player;
             if (player.TryGetComponent<Buffs>(out var playerBuffs))
             {
                 Ailments = plugin.CustomAilments
@@ -65,29 +67,29 @@ public class RuleState
             {
                 Animation = actorComponent.Animation;
                 IsMoving = actorComponent.isMoving;
-                Skills = new SkillDictionary(controller, player);
+                Skills = new SkillDictionary(_gameController, player);
                 AnimationId = actorComponent.AnimationController?.CurrentAnimationId ?? 0;
                 AnimationStage = actorComponent.AnimationController?.CurrentAnimationStage ?? 0;
             }
 
             Buffs = new BuffDictionary(playerBuffs?.BuffsList ?? [], Skills);
 
-            Flasks = new FlasksInfo(controller, InternalState);
-            Player = new MonsterInfo(controller, player);
+            Flasks = new FlasksInfo(_gameController, InternalState);
+            Player = new MonsterInfo(_gameController, player);
             _nearbyMonsterInfo = new Lazy<NearbyMonsterInfo>(() => new NearbyMonsterInfo(plugin), LazyThreadSafetyMode.None);
-            _miscellaneousObjects = new Lazy<List<EntityInfo>>(() => controller.EntityListWrapper.ValidEntitiesByType[EntityType.MiscellaneousObjects].Select(x => new EntityInfo(controller, x)).ToList(), LazyThreadSafetyMode.None);
-            _ingameiconObjects = new Lazy<List<EntityInfo>>(() => controller.EntityListWrapper.ValidEntitiesByType[EntityType.IngameIcon].Select(x => new EntityInfo(controller, x)).ToList(), LazyThreadSafetyMode.None);
-            _allMonsters = new Lazy<List<MonsterInfo>>(() => controller.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
+            _miscellaneousObjects = new Lazy<List<EntityInfo>>(() => _gameController.EntityListWrapper.ValidEntitiesByType[EntityType.MiscellaneousObjects].Select(x => new EntityInfo(_gameController, x)).ToList(), LazyThreadSafetyMode.None);
+            _ingameiconObjects = new Lazy<List<EntityInfo>>(() => _gameController.EntityListWrapper.ValidEntitiesByType[EntityType.IngameIcon].Select(x => new EntityInfo(_gameController, x)).ToList(), LazyThreadSafetyMode.None);
+            _allMonsters = new Lazy<List<MonsterInfo>>(() => _gameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
                 .Where(e => NearbyMonsterInfo.IsValidMonster(plugin, e, false))
-                    .Select(x => new MonsterInfo(controller, x)).ToList(), LazyThreadSafetyMode.None);
-            _corpses = new Lazy<List<MonsterInfo>>(() => controller.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
+                    .Select(x => new MonsterInfo(_gameController, x)).ToList(), LazyThreadSafetyMode.None);
+            _corpses = new Lazy<List<MonsterInfo>>(() => _gameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
                 .Where(e => NearbyMonsterInfo.IsValidMonster(plugin, e, false))
                 .Where(x=>x.IsDead)
-                    .Select(x => new MonsterInfo(controller, x)).ToList(), LazyThreadSafetyMode.None);
-            _effects = new Lazy<List<EntityInfo>>(() => controller.EntityListWrapper.ValidEntitiesByType[EntityType.Effect].Select(x => new EntityInfo(controller, x)).ToList(), LazyThreadSafetyMode.None);
-            _allPlayers = new Lazy<List<MonsterInfo>>(() => controller.EntityListWrapper.ValidEntitiesByType[EntityType.Player]
+                    .Select(x => new MonsterInfo(_gameController, x)).ToList(), LazyThreadSafetyMode.None);
+            _effects = new Lazy<List<EntityInfo>>(() => _gameController.EntityListWrapper.ValidEntitiesByType[EntityType.Effect].Select(x => new EntityInfo(_gameController, x)).ToList(), LazyThreadSafetyMode.None);
+            _allPlayers = new Lazy<List<MonsterInfo>>(() => _gameController.EntityListWrapper.ValidEntitiesByType[EntityType.Player]
                     .Where(e => NearbyMonsterInfo.IsValidMonster(plugin, e, false))
-                    .Select(x => new MonsterInfo(controller, x)).ToList(), LazyThreadSafetyMode.None);
+                    .Select(x => new MonsterInfo(_gameController, x)).ToList(), LazyThreadSafetyMode.None);
         }
     }
 
@@ -210,4 +212,44 @@ public class RuleState
     
     [Api]
     public bool IsAnyLargePanelOpen => _internalState.LargePanelVisible; 
+
+    [Api]
+    public void MoveCursorToMonster(MonsterInfo monster, int delayMs = 0)
+    {
+        if (delayMs > 0)
+        {
+            System.Threading.Tasks.Task.Delay(delayMs).ContinueWith(_ => 
+                Input.SetCursorPos(monster.RandomizedScreenPos()));
+        }
+        else
+        {
+            Input.SetCursorPos(monster.RandomizedScreenPos());
+        }
+    }
+
+    [Api]
+    public void MoveCursorToMonsterAndReturnToCenter(MonsterInfo monster, int delayMs = 1000)
+    {
+        MoveCursorToMonster(monster);
+        var screenCenter = new Vector2(
+            _gameController.Window.GetWindowRectangleTimeCache.Size.X / 2f,
+            _gameController.Window.GetWindowRectangleTimeCache.Size.Y / 2f);
+        var randomOffset = new Vector2(
+            Random.Shared.Next(-5, 5),
+            Random.Shared.Next(-5, 5));
+        System.Threading.Tasks.Task.Delay(delayMs).ContinueWith(_ => 
+            Input.SetCursorPos(screenCenter + randomOffset));
+    }
+
+    [Api]
+    public void MoveCursorToMonsterAndReturnToPrevious(MonsterInfo monster, int delayMs = 1000)
+    {
+        var originalPos = Input.GetCursorPosition();
+        MoveCursorToMonster(monster);
+        var randomOffset = new Vector2(
+            Random.Shared.Next(-5, 5),
+            Random.Shared.Next(-5, 5));
+        System.Threading.Tasks.Task.Delay(delayMs).ContinueWith(_ => 
+            Input.SetCursorPos(originalPos + randomOffset));
+    }
 }

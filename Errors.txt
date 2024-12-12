@@ -1,0 +1,2 @@
+Build failed:
+[12/12/2024 2:03:22 PM, T:\poe\Plugins\Source\ReAgent\State\RuleState.cs(247, 33)] CS0117: 'Input' does not contain a definition for 'GetCursorPosition'
