@@ -7,6 +7,7 @@ using ExileCore2;
 using ExileCore2.PoEMemory.Components;
 using ExileCore2.Shared.Enums;
 using System.Numerics;
+using System.Runtime.InteropServices;
 
 namespace ReAgent.State;
 
@@ -23,6 +24,22 @@ public class RuleState
     private readonly Lazy<List<MonsterInfo>> _allPlayers;
     private readonly Lazy<List<MonsterInfo>> _corpses;
     private readonly GameController _gameController;
+
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out POINT lpPoint);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    private Vector2 GetCursorPosition()
+    {
+        GetCursorPos(out POINT point);
+        return new Vector2(point.X, point.Y);
+    }
 
     public RuleInternalState InternalState
     {
@@ -244,7 +261,7 @@ public class RuleState
     [Api]
     public void MoveCursorToMonsterAndReturnToPrevious(MonsterInfo monster, int delayMs = 1000)
     {
-        var originalPos = Input.GetCursorPosition();
+        var originalPos = GetCursorPosition();
         MoveCursorToMonster(monster);
         var randomOffset = new Vector2(
             Random.Shared.Next(-5, 5),
