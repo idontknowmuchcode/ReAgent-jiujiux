@@ -298,6 +298,7 @@ public sealed class ReAgent : BaseSettingsPlugin<ReAgentSettings>
         _internalState.KeysToHoldDown.Clear();
         _internalState.KeysToRelease.Clear();
         _internalState.TextToDisplay.Clear();
+        _internalState.AdvancedTextToDisplay.Clear();
         _internalState.GraphicToDisplay.Clear();
         _internalState.ProgressBarsToDisplay.Clear();
         _internalState.ChatTitlePanelVisible = GameController.IngameState.IngameUi.ChatTitlePanel.IsVisible;
@@ -374,6 +375,15 @@ public sealed class ReAgent : BaseSettingsPlugin<ReAgentSettings>
             var textSize = Graphics.MeasureText(text);
             Graphics.DrawBox(position, position + textSize, Color.Black);
             Graphics.DrawText(text, position, ColorFromName(color));
+        }
+
+        foreach (var (text, position, textColor, backgroundColor, fontSize) in _internalState.AdvancedTextToDisplay)
+        {
+            using (Graphics.SetTextScale(fontSize / 16f))
+            {
+                var textSize = Graphics.MeasureText(text);
+                Graphics.DrawTextWithBackground(text, position, ColorFromName(textColor), ColorFromName(backgroundColor));
+            }
         }
     }
 
