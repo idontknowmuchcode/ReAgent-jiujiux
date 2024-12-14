@@ -8,6 +8,7 @@ using ExileCore2.PoEMemory.Components;
 using ExileCore2.Shared.Enums;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 
 namespace ReAgent.State;
 
@@ -231,42 +232,78 @@ public class RuleState
     public bool IsAnyLargePanelOpen => _internalState.LargePanelVisible; 
 
     [Api]
-    public void MoveCursorToMonster(MonsterInfo monster, int delayMs = 0)
+    public List<(string Text, Vector2 Position, string TextColor, string BackgroundColor, float FontSize)> AdvancedTextToDisplay { get; } = new();
+
+    private class MouseMovement
     {
-        if (delayMs > 0)
+        public static Vector2 GetNextPoint(Vector2 start, Vector2 end, float progress)
         {
-            System.Threading.Tasks.Task.Delay(delayMs).ContinueWith(_ => 
-                Input.SetCursorPos(monster.RandomizedScreenPos()));
-        }
-        else
-        {
-            Input.SetCursorPos(monster.RandomizedScreenPos());
+            // Using Bezier curve with some Gaussian noise for natural movement
+            var control1 = start + (end - start) * 0.3f * (1 + (float)Random.Shared.NextDouble());
+            var control2 = start + (end - start) * 0.7f * (1 + (float)Random.Shared.NextDouble());
+            
+            var t = progress;
+            var bezierPoint = new Vector2(
+                (float)(Math.Pow(1 - t, 3) * start.X + 
+                       3 * Math.Pow(1 - t, 2) * t * control1.X + 
+                       3 * (1 - t) * Math.Pow(t, 2) * control2.X + 
+                       Math.Pow(t, 3) * end.X),
+                (float)(Math.Pow(1 - t, 3) * start.Y + 
+                       3 * Math.Pow(1 - t, 2) * t * control1.Y + 
+                       3 * (1 - t) * Math.Pow(t, 2) * control2.Y + 
+                       Math.Pow(t, 3) * end.Y)
+            );
+            
+            // Add small Gaussian noise
+            var u1 = 1.0 - Random.Shared.NextDouble();
+            var u2 = 1.0 - Random.Shared.NextDouble();
+            var noise = new Vector2(
+                (float)(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2)),
+                (float)(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2))
+            ) * 2f;
+            
+            return bezierPoint + noise;
         }
     }
 
-    [Api]
-    public void MoveCursorToMonsterAndReturnToCenter(MonsterInfo monster, int delayMs = 1000)
+    private async Task MoveCursorWithHumanization(Vector2 targetPos, int delayMs = 1000)
     {
-        MoveCursorToMonster(monster);
+        var startPos = GetCursorPosition();
+        var distance = Vector2.Distance(startPos, targetPos);
+        var steps = Math.Max(10, (int)(distance / 20)); // More steps for longer distances
+        
+        for (int i = 0; i < steps; i++)
+        {
+            var progress = (i + 1f) / steps;
+            var nextPos = MouseMovement.GetNextPoint(startPos, targetPos, progress);
+            Input.SetCursorPos(nextPos);
+            
+            // Variable delay between movements
+            var stepDelay = (int)(5 + Random.Shared.NextDouble() * 10);
+            await Task.Delay(stepDelay);
+        }
+        
+        // Ensure we reach the target
+        Input.SetCursorPos(targetPos);
+        await Task.Delay(delayMs);
+    }
+
+    [Api]
+    public async Task MoveCursorToMonsterAndReturnToCenter(MonsterInfo monster, int delayMs = 1000)
+    {
+        await MoveCursorWithHumanization(monster.RandomizedScreenPos());
         var screenCenter = new Vector2(
             _gameController.Window.GetWindowRectangleTimeCache.Size.X / 2f,
-            _gameController.Window.GetWindowRectangleTimeCache.Size.Y / 2f);
-        var randomOffset = new Vector2(
-            Random.Shared.Next(-5, 5),
-            Random.Shared.Next(-5, 5));
-        System.Threading.Tasks.Task.Delay(delayMs).ContinueWith(_ => 
-            Input.SetCursorPos(screenCenter + randomOffset));
+            _gameController.Window.GetWindowRectangleTimeCache.Size.Y / 2f
+        );
+        await MoveCursorWithHumanization(screenCenter, delayMs);
     }
 
     [Api]
-    public void MoveCursorToMonsterAndReturnToPrevious(MonsterInfo monster, int delayMs = 1000)
+    public async Task MoveCursorToMonsterAndReturnToPrevious(MonsterInfo monster, int delayMs = 1000)
     {
         var originalPos = GetCursorPosition();
-        MoveCursorToMonster(monster);
-        var randomOffset = new Vector2(
-            Random.Shared.Next(-5, 5),
-            Random.Shared.Next(-5, 5));
-        System.Threading.Tasks.Task.Delay(delayMs).ContinueWith(_ => 
-            Input.SetCursorPos(originalPos + randomOffset));
+        await MoveCursorWithHumanization(monster.RandomizedScreenPos());
+        await MoveCursorWithHumanization(originalPos, delayMs);
     }
 }
