@@ -17,6 +17,7 @@ public class RuleState
 {
     private readonly Lazy<NearbyMonsterInfo> _nearbyMonsterInfo;
     private readonly Lazy<List<EntityInfo>> _miscellaneousObjects;
+    private readonly Lazy<List<EntityInfo>> _noneEntities;
     private readonly RuleInternalState _internalState;
     private readonly Lazy<List<EntityInfo>> _ingameiconObjects;
     
@@ -95,9 +96,10 @@ public class RuleState
             Flasks = new FlasksInfo(_gameController, InternalState);
             Player = new MonsterInfo(_gameController, player);
             _nearbyMonsterInfo = new Lazy<NearbyMonsterInfo>(() => new NearbyMonsterInfo(plugin), LazyThreadSafetyMode.None);
-            _miscellaneousObjects = new Lazy<List<EntityInfo>>(() => _gameController.EntityListWrapper.ValidEntitiesByType[EntityType.MiscellaneousObjects].Select(x => new EntityInfo(_gameController, x)).ToList(), LazyThreadSafetyMode.None);
-            _ingameiconObjects = new Lazy<List<EntityInfo>>(() => _gameController.EntityListWrapper.ValidEntitiesByType[EntityType.IngameIcon].Select(x => new EntityInfo(_gameController, x)).ToList(), LazyThreadSafetyMode.None);
-            _allMonsters = new Lazy<List<MonsterInfo>>(() => _gameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
+            _miscellaneousObjects = new Lazy<List<EntityInfo>>(() => controller.EntityListWrapper.ValidEntitiesByType[EntityType.MiscellaneousObjects].Select(x => new EntityInfo(controller, x)).ToList(), LazyThreadSafetyMode.None);
+            _noneEntities = new Lazy<List<EntityInfo>>(() => controller.EntityListWrapper.ValidEntitiesByType[EntityType.None].Select(x => new EntityInfo(controller, x)).ToList(), LazyThreadSafetyMode.None);
+            _ingameiconObjects = new Lazy<List<EntityInfo>>(() => controller.EntityListWrapper.ValidEntitiesByType[EntityType.IngameIcon].Select(x => new EntityInfo(controller, x)).ToList(), LazyThreadSafetyMode.None);
+            _allMonsters = new Lazy<List<MonsterInfo>>(() => controller.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
                 .Where(e => NearbyMonsterInfo.IsValidMonster(plugin, e, false))
                     .Select(x => new MonsterInfo(_gameController, x)).ToList(), LazyThreadSafetyMode.None);
             _corpses = new Lazy<List<MonsterInfo>>(() => _gameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
@@ -177,6 +179,9 @@ public class RuleState
 
     [Api]
     public IEnumerable<EntityInfo> MiscellaneousObjects => _miscellaneousObjects.Value;
+
+    [Api]
+    public IEnumerable<EntityInfo> NoneEntities => _noneEntities.Value;
 
     [Api]
     public IEnumerable<EntityInfo> IngameIcons => _ingameiconObjects.Value;
