@@ -266,8 +266,24 @@ public class RuleState
         }
     }
 
+    private bool IsWithinScreenBounds(Vector2 position)
+    {
+        if (_gameController?.Window?.GetWindowRectangleTimeCache == null) return false;
+        
+        var screenSize = _gameController.Window.GetWindowRectangleTimeCache.Size;
+        return position.X >= 0 && position.X < screenSize.X && 
+               position.Y >= 0 && position.Y < screenSize.Y;
+    }
+
     private async Task MoveCursorWithHumanization(Vector2 targetPos, int delayMs = 1000)
     {
+        // Validate target position is within screen bounds
+        if (!IsWithinScreenBounds(targetPos))
+        {
+            DebugWindow.LogError($"Target position {targetPos} is outside screen bounds");
+            return;
+        }
+
         var startPos = GetCursorPosition();
         var distance = Vector2.Distance(startPos, targetPos);
         var steps = Math.Max(10, (int)(distance / 20)); // More steps for longer distances
@@ -276,11 +292,16 @@ public class RuleState
         {
             var progress = (i + 1f) / steps;
             var nextPos = MouseMovement.GetNextPoint(startPos, targetPos, progress);
-            Input.SetCursorPos(nextPos);
             
-            // Variable delay between movements
-            var stepDelay = (int)(5 + Random.Shared.NextDouble() * 10);
-            await Task.Delay(stepDelay);
+            // Clamp position within screen bounds
+            if (IsWithinScreenBounds(nextPos))
+            {
+                Input.SetCursorPos(nextPos);
+                
+                // Variable delay between movements
+                var stepDelay = (int)(5 + Random.Shared.NextDouble() * 10);
+                await Task.Delay(stepDelay);
+            }
         }
         
         // Ensure we reach the target
