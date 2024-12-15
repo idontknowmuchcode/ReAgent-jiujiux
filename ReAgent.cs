@@ -421,7 +421,8 @@ public sealed class ReAgent : BaseSettingsPlugin<ReAgentSettings>
                      x.ApplicationResult is SideEffectApplicationResult.AppliedUnique or SideEffectApplicationResult.AppliedDuplicate))
         {
             successfulApplication.x.SetExecuted(_state);
-            if (successfulApplication.ApplicationResult == SideEffectApplicationResult.AppliedUnique)
+            if (successfulApplication.ApplicationResult == SideEffectApplicationResult.AppliedUnique && 
+                successfulApplication.x.SideEffect is PressKeySideEffect)
             {
                 _actionInfo.Enqueue((DateTime.Now, successfulApplication.x.SideEffect.ToString()));
             }

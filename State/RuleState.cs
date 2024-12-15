@@ -26,6 +26,7 @@ public class RuleState
     private readonly Lazy<List<MonsterInfo>> _allPlayers;
     private readonly Lazy<List<MonsterInfo>> _corpses;
     private readonly GameController _gameController;
+    private readonly ReAgent _plugin;
 
     [DllImport("user32.dll")]
     private static extern bool GetCursorPos(out POINT lpPoint);
@@ -60,6 +61,7 @@ public class RuleState
     {
         _internalState = internalState;
         _gameController = plugin.GameController;
+        _plugin = plugin;
         if (_gameController != null)
         {
             IsInHideout = plugin.GameController.Area.CurrentArea.IsHideout;
@@ -96,12 +98,21 @@ public class RuleState
             Flasks = new FlasksInfo(_gameController, InternalState);
             Player = new MonsterInfo(_gameController, player);
             _nearbyMonsterInfo = new Lazy<NearbyMonsterInfo>(() => new NearbyMonsterInfo(plugin), LazyThreadSafetyMode.None);
-            _miscellaneousObjects = new Lazy<List<EntityInfo>>(() => controller.EntityListWrapper.ValidEntitiesByType[EntityType.MiscellaneousObjects].Select(x => new EntityInfo(controller, x)).ToList(), LazyThreadSafetyMode.None);
-            _noneEntities = new Lazy<List<EntityInfo>>(() => controller.EntityListWrapper.ValidEntitiesByType[EntityType.None].Select(x => new EntityInfo(controller, x)).ToList(), LazyThreadSafetyMode.None);
-            _ingameiconObjects = new Lazy<List<EntityInfo>>(() => controller.EntityListWrapper.ValidEntitiesByType[EntityType.IngameIcon].Select(x => new EntityInfo(controller, x)).ToList(), LazyThreadSafetyMode.None);
-            _allMonsters = new Lazy<List<MonsterInfo>>(() => controller.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
+            _miscellaneousObjects = new Lazy<List<EntityInfo>>(() => 
+                _gameController.EntityListWrapper.ValidEntitiesByType[EntityType.MiscellaneousObjects]
+                    .Select(x => new EntityInfo(_gameController, x)).ToList(), 
+                LazyThreadSafetyMode.None);
+            _noneEntities = new Lazy<List<EntityInfo>>(() => 
+                _gameController.EntityListWrapper.ValidEntitiesByType[EntityType.None]
+                    .Select(x => new EntityInfo(_gameController, x)).ToList(), 
+                LazyThreadSafetyMode.None);
+            _ingameiconObjects = new Lazy<List<EntityInfo>>(() => 
+                _gameController.EntityListWrapper.ValidEntitiesByType[EntityType.IngameIcon]
+                    .Select(x => new EntityInfo(_gameController, x)).ToList(), 
+                LazyThreadSafetyMode.None);
+            _allMonsters = new Lazy<List<MonsterInfo>>(() => _gameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
                 .Where(e => NearbyMonsterInfo.IsValidMonster(plugin, e, false))
-                    .Select(x => new MonsterInfo(_gameController, x)).ToList(), LazyThreadSafetyMode.None);
+                .Select(x => new MonsterInfo(_gameController, x)).ToList(), LazyThreadSafetyMode.None);
             _corpses = new Lazy<List<MonsterInfo>>(() => _gameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
                 .Where(e => NearbyMonsterInfo.IsValidMonster(plugin, e, false))
                 .Where(x=>x.IsDead)
@@ -291,25 +302,68 @@ public class RuleState
 
         var startPos = GetCursorPosition();
         var distance = Vector2.Distance(startPos, targetPos);
-        var steps = Math.Max(10, (int)(distance / 20)); // More steps for longer distances
         
+        // Use settings for step calculation
+        var settings = _plugin.Settings.PluginSettings.MouseMovement;
+        var baseSteps = Math.Max(settings.MinSteps.Value, (int)(distance / settings.BaseSpeed.Value));
+        var randomFactor = settings.RandomizationFactor.Value;
+        var steps = baseSteps + Random.Shared.Next(-(int)(baseSteps * randomFactor), (int)(baseSteps * randomFactor));
+
+        // Generate deviation for the control points
+        var midPoint = (startPos + targetPos) / 2f;
+        var perpendicular = new Vector2(-(targetPos.Y - startPos.Y), targetPos.X - startPos.X);
+        perpendicular = Vector2.Normalize(perpendicular) * (distance * 0.25f * (float)(Random.Shared.NextDouble() * 0.8 + 0.2));
+        
+        var control1 = midPoint + perpendicular * (float)(Random.Shared.NextDouble() * 0.5 + 0.5);
+        var control2 = midPoint - perpendicular * (float)(Random.Shared.NextDouble() * 0.5 + 0.5);
+
         for (int i = 0; i < steps; i++)
         {
-            var progress = (i + 1f) / steps;
-            var nextPos = MouseMovement.GetNextPoint(startPos, targetPos, progress);
+            var t = (i + 1f) / steps;
             
-            // Clamp position within screen bounds
+            // Cubic Bezier curve calculation
+            var oneMinusT = 1 - t;
+            var oneMinusTSquared = oneMinusT * oneMinusT;
+            var tSquared = t * t;
+            
+            var nextPos = new Vector2(
+                oneMinusT * oneMinusTSquared * startPos.X +
+                3 * oneMinusTSquared * t * control1.X +
+                3 * oneMinusT * tSquared * control2.X +
+                tSquared * t * targetPos.X,
+                
+                oneMinusT * oneMinusTSquared * startPos.Y +
+                3 * oneMinusTSquared * t * control1.Y +
+                3 * oneMinusT * tSquared * control2.Y +
+                tSquared * t * targetPos.Y
+            );
+
+            // Add Gaussian noise
+            var u1 = 1.0 - Random.Shared.NextDouble();
+            var u2 = 1.0 - Random.Shared.NextDouble();
+            var standardDeviation = settings.NoiseScale.Value * Math.Min(distance * 0.01f, 2.0f); // Use noise scale setting
+            var noise = new Vector2(
+                (float)(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * standardDeviation),
+                (float)(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2) * standardDeviation)
+            );
+
+            nextPos += noise;
+
+            // Ensure position is within bounds
             if (IsWithinScreenBounds(nextPos))
             {
                 Input.SetCursorPos(nextPos);
                 
-                // Variable delay between movements
-                var stepDelay = (int)(5 + Random.Shared.NextDouble() * 10);
-                await Task.Delay(stepDelay);
+                // Variable delay with Gaussian distribution
+                var baseDelay = settings.BaseDelay.Value;
+                var delayVariation = Math.Max(2.0, Math.Sqrt(-2.0 * Math.Log(Random.Shared.NextDouble())) * 
+                                   Math.Cos(2.0 * Math.PI * Random.Shared.NextDouble()) * 3.0);
+                var stepDelay = (int)(baseDelay + delayVariation);
+                await Task.Delay(Math.Max(1, stepDelay));
             }
         }
-        
-        // Ensure we reach the target
+
+        // Ensure we reach the exact target
         Input.SetCursorPos(targetPos);
         await Task.Delay(delayMs);
     }
