@@ -342,7 +342,7 @@ public sealed class ReAgent : BaseSettingsPlugin<ReAgentSettings>
             Input.KeyUp(heldKey);
         }
 
-        foreach (var (text, position, size, fraction, color, backgroundColor, textColor) in _internalState.ProgressBarsToDisplay)
+        foreach (var (text, position, size, fraction, color, textColor, backgroundColor) in _internalState.ProgressBarsToDisplay)
         {
             var textSize = Graphics.MeasureText(text);
             Graphics.DrawBox(position, position + size, ColorFromName(backgroundColor));
@@ -350,7 +350,7 @@ public sealed class ReAgent : BaseSettingsPlugin<ReAgentSettings>
             Graphics.DrawText(text, position + size / 2 - textSize / 2, ColorFromName(textColor));
         }
 
-        foreach (var (graphicFilePath, position, size, tintColor) in _internalState.GraphicToDisplay)
+        foreach (var (graphicFilePath, position, size, tintColor, text, textColor, fontSize, backgroundColor) in _internalState.GraphicToDisplay)
         {
             if (!_loadedTextures.Contains(graphicFilePath))
             {
@@ -367,6 +367,19 @@ public sealed class ReAgent : BaseSettingsPlugin<ReAgentSettings>
             if (_loadedTextures.Contains(graphicFilePath))
             {
                 Graphics.DrawImage(graphicFilePath, new RectangleF(position.X, position.Y, size.X, size.Y), ColorFromName(tintColor));
+                
+                if (!string.IsNullOrEmpty(text))
+                {
+                    var textSize = Graphics.MeasureText(text);
+                    var textPosition = new Vector2(
+                        position.X + (size.X - textSize.X) / 2,  // Center horizontally
+                        position.Y + size.Y + 2                   // Place 2 pixels below image
+                    );
+                    using (Graphics.SetTextScale(fontSize / 16f))
+                    {
+                        Graphics.DrawTextWithBackground(text, textPosition, ColorFromName(textColor), ColorFromName(backgroundColor));
+                    }
+                }
             }
         }
 
@@ -381,7 +394,6 @@ public sealed class ReAgent : BaseSettingsPlugin<ReAgentSettings>
         {
             using (Graphics.SetTextScale(fontSize / 16f))
             {
-                var textSize = Graphics.MeasureText(text);
                 Graphics.DrawTextWithBackground(text, position, ColorFromName(textColor), ColorFromName(backgroundColor));
             }
         }
