@@ -72,7 +72,7 @@ public class EntityInfo
     public Vector2 ScreenPos => Controller.IngameState.Camera.WorldToScreen(Entity.Pos);
 
     [Api]
-    public Vector2 RandomizedScreenPos(int minOffset = -5, int maxOffset = 5)
+    public Vector2 RandomizedScreenPos(int minOffset = -2, int maxOffset = 2)
     {
         var random = new Random();
         return ScreenPos + new Vector2(

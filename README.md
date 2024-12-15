@@ -99,35 +99,34 @@ if (groundEffects != null && groundEffects.Any())
 return null;
 ```
 
+### Example of drawing monster effects with png and text
+
+![Graphic Display](/screenshots/GraphicToDisplay.png)
+
 ### Cursor Movement Features
 
-Two methods are available for automated cursor movement with humanization:
+Three methods are available for automated cursor movement with humanization:
 
 1. `MoveCursorToMonsterAndReturnToCenter`: Moves the cursor to a monster's position and then returns it to the center of the screen after a delay.
 
 ```csharp
-await MoveCursorToMonsterAndReturnToCenter(monster, delayMs: 1000)
+ MoveCursorToMonsterAndReturnToCenter(monster, delayMs: 1000)
 ```
 
-2. `MoveCursorToMonsterAndReturnToPrevious`: Moves the cursor to a monster's position and then returns it to the previous position after a delay.
+### Example of using MoveCursorToMonsterAndReturnToCenter to cast Pain Offering on skeleton minion
 
 ```csharp
-await MoveCursorToMonsterAndReturnToPrevious(monster, delayMs: 1000)
-```
-
-### Example of using MoveCursorToMonsterAndReturnToPrevious to cast Pain Offering on skeleton minion
-
-```csharp
-//Pain
-if (!State.SinceLastActivation(1) || State.MonsterCount(50, ReAgent.State.MonsterRarity.AtLeastMagic) == 0)
+if (!State.SinceLastActivation(1) ||
+    (State.MonsterCount(100, ReAgent.State.MonsterRarity.Normal) < 10 &&
+     State.MonsterCount(100, ReAgent.State.MonsterRarity.AtLeastMagic) < 1))
 {
     return false;
 }
 
-// Get all non-Raging Spirit friendly monsters that are moving/active
 var nonRagingSpiritMinions = State.FriendlyMonsters
     .Where(monster =>
-        !monster.Metadata.Contains("RagingSpiritPlayerSummoned") &&
+        (!monster.Metadata.Contains("RagingSpiritPlayerSummoned") &&
+         !monster.Metadata.Contains("BoneConstruct")) &&
         monster.IsUsingAbility)
     .ToList();
 
@@ -138,20 +137,96 @@ if (nonRagingSpiritMinions.Count == 0 ||
     return false;
 }
 
-// Get any active skeleton
+const float DISTANCE_WEIGHT = 0.7f; // Lower weight means skeletondistance from playeris more important
+const float NEARBY_COUNT_WEIGHT = 0.3f; // Higher weight means other nearby skeletons count is more important
+const int NEARBY_RADIUS = 50; // Radius to check for nearby skeletons
+
+// Get the skeleton with the best combined score of proximity to player and nearby skeleton count
 var targetSkeleton = State.FriendlyMonsters
-    .FirstOrDefault(monster =>
+    .Where(monster =>
         monster.Metadata.Contains("Skeletons") &&
-        monster.IsUsingAbility);
+        monster.IsUsingAbility)
+    .Select(skeleton => new
+    {
+        Skeleton = skeleton,
+        DistanceScore = 1.0f / (1.0f + skeleton.Distance),
+        NearbyScore = State.FriendlyMonsters.Count(other =>
+            other.Metadata.Contains("Skeletons") &&
+            other.IsUsingAbility &&
+            other.DistanceTo(skeleton) <= NEARBY_RADIUS) / 10.0f
+    })
+    .OrderByDescending(data =>
+        (data.DistanceScore * DISTANCE_WEIGHT) +
+        (data.NearbyScore * NEARBY_COUNT_WEIGHT))
+    .Select(data => data.Skeleton)
+    .FirstOrDefault();
 
 if (targetSkeleton != null)
 {
-    State.MoveCursorToMonsterAndReturnToPrevious(targetSkeleton, 200);
+    State.MoveCursorToMonsterAndReturnToCenter(targetSkeleton, 200);
     return true;
 }
 
 return false;
 ```
+
+2. `MoveCursorToMonsterAndReturnToPrevious`: Moves the cursor to a monster's position and then returns it to the previous position after a delay.
+
+```csharp
+ MoveCursorToMonsterAndReturnToPrevious(monster, delayMs: 1000)
+```
+
+3. `MoveCursorToMonster`: Moves the cursor to a monster's position.
+
+```csharp
+ MoveCursorToMonster(monster)
+```
+
+### Example of using MoveCursorToMonster
+
+```csharp
+if (!State.SinceLastActivation(1))
+{
+    return false;
+}
+
+// Check for targetable corpses near cursor and player
+bool hasNearbyCorpse = State.Corpses
+    .Any(corpse =>
+        corpse.DistanceToCursor < 50 &&
+        corpse.Distance < 50 &&
+        corpse.IsTargetable);
+
+// Check for monsters near player
+int nearbyMonsterCount = State.MonsterCount(50);
+
+// If we don't have both corpses and monsters, exit early
+if (!hasNearbyCorpse || nearbyMonsterCount == 0)
+{
+    return false;
+}
+
+// Find the closest targetable corpse to cursor
+var targetCorpse = State.Corpses
+    .Where(corpse =>
+        corpse.Distance < 50 &&
+        corpse.IsTargetable)
+    .OrderBy(corpse => corpse.DistanceToCursor)
+    .FirstOrDefault();
+
+// If we found a valid corpse that's also near the cursor
+if (targetCorpse != null &&
+    targetCorpse.DistanceToCursor < 20 &&
+    targetCorpse.IsTargetable)
+{
+    State.MoveCursorToMonster(targetCorpse);
+    return true;
+}
+
+return false;
+```
+
+![MouseMenu](/screenshots/MouseMenu.png)
 
 ### Monster Distance Calculation
 

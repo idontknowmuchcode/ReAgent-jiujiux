@@ -296,7 +296,6 @@ public class RuleState
         // Validate target position is within screen bounds
         if (!IsWithinScreenBounds(targetPos))
         {
-            DebugWindow.LogError($"Target position {targetPos} is outside screen bounds");
             return;
         }
 
@@ -366,6 +365,12 @@ public class RuleState
         // Ensure we reach the exact target
         Input.SetCursorPos(targetPos);
         await Task.Delay(delayMs);
+    }
+    
+    [Api]
+    public async Task MoveCursorToMonster(MonsterInfo monster)
+    {
+        await MoveCursorWithHumanization(monster.RandomizedScreenPos());
     }
 
     [Api]
