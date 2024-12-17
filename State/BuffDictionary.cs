@@ -45,4 +45,6 @@ public class BuffDictionary
 
     [JsonProperty]
     private Dictionary<string, StatusEffect> AllBuffs => _source.Keys.ToDictionary(x => x, x => this[x]);
+
+    public int Count => AllBuffs.Count;
 }
